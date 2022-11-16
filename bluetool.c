@@ -302,6 +302,33 @@ int rfcomm_channel_scan(int dev_id, char *target) {
   return 0;
 }
 
+int l2cap_psm_comm(int dev_id, char *target, int psm, char *data) {
+  struct sockaddr_l2 addr = { 0 };
+  unsigned long buff_sz = 1024;
+  char *buff;
+  int sock, stat, sent, rb;
+
+  buff = (char *)malloc(buff_sz);
+  addr.l2_family = AF_BLUETOOTH;
+  str2ba(target, &addr.l2_bdaddr);
+  sock = prepare_l2cap_socket();
+  addr.l2_psm = htobs((unsigned short)psm);
+  printf("connecting ...\n");
+  stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+  if (stat != 0) {
+      printf("cannot connect\n");
+      close(sock);
+      return 0;
+  }
+
+  printf("connected.\n");
+  sent = send(sock, data, strlen(data), 0);
+  printf("%d bytes sent\n", sent);
+  rb = recv(sock, buff, buff_sz, 0);
+  printf("%d bytes received: %s\n", rb, buff);
+  close(sock); 
+}
+
 int l2cap_psm_scan(int dev_id, char *target) {
   struct sockaddr_l2 addr = { 0 };
   char *buff;
@@ -474,14 +501,15 @@ void usage() {
   printf("bluetool v%.2f usage:\n\n", VERSION);
   printf(" ./bluetool [mode] (interface) (target)\n");
   printf("examples:\n");
-  printf(" ./bluetool i                         enum bluetooth local interfaces\n");
-  printf(" ./bluetool s 0                       scan devices throught the interface 0\n");
-  printf(" ./bluetool e 0                       scan devices throught the interface 0\n");
-  printf(" ./bluetool h 0                       scan hidden devices (very slow)\n");
-  printf(" ./bluetool r 0 11:22:33:44:55:66     rfcomm channel scan (noisy)\n");
-  printf(" ./bluetool l 0 11:22:33:44:55:66     l2cap psm scan\n");
-  printf(" ./bluetool c 0 11:22:33:44:55:66     low level command fuzzer\n");
-  printf(" ./bluetool u 0 11:22:33:44:55:66     services uuid scan\n");
+  printf(" ./bluetool i                                 enum bluetooth local interfaces\n");
+  printf(" ./bluetool s 0                               scan devices throught the interface 0\n");
+  printf(" ./bluetool e 0                               scan devices throught the interface 0\n");
+  printf(" ./bluetool h 0                               scan hidden devices (very slow)\n");
+  printf(" ./bluetool r 0 11:22:33:44:55:66             rfcomm channel scan (noisy)\n");
+  printf(" ./bluetool l 0 11:22:33:44:55:66             l2cap psm scan\n");
+  printf(" ./bluetool p 0 11:22:33:44:55:66 psm data    l2cap psm send data\n");
+  printf(" ./bluetool c 0 11:22:33:44:55:66             low level command fuzzer\n");
+  printf(" ./bluetool u 0 11:22:33:44:55:66             services uuid scan\n");
 
   printf("\n");
   exit(1);
@@ -492,7 +520,7 @@ int main(int argc, char **argv) {
   int dev_id;
   time_t t;
 
-  if (argc!=2 && argc!=3 && argc!=4)
+  if (argc < 4)
     usage();
 
 
@@ -508,6 +536,7 @@ int main(int argc, char **argv) {
     case 'l': if (argc!=4) usage(); return l2cap_psm_scan(atoi(argv[2]), argv[3]);
     case 'c': if (argc!=4) usage(); return command_fuzzer(atoi(argv[2]), argv[3]);
     case 'u': if (argc!=4) usage(); return uuid_scan(atoi(argv[2]), argv[3]);
+    case 'p': if (argc!=6) usage(); return l2cap_psm_comm(atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
     default: usage();
   }
 }
