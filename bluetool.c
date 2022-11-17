@@ -520,7 +520,7 @@ int main(int argc, char **argv) {
   int dev_id;
   time_t t;
 
-  if (argc < 4)
+  if (argc < 2)
     usage();
 
 
