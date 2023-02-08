@@ -29,7 +29,7 @@
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
 
-float VERSION = 0.1;
+float VERSION = 0.2;
 char VERBOSE = 0;
 
 int blue_scan(int dev_id) {
