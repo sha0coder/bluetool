@@ -266,7 +266,6 @@ int prepare_l2cap_socket() {
   return sock;
 }
 
-
 int rfcomm_channel_scan(int dev_id, char *target) {
   int sock, sz, buff_sz, stat;
   char *buff;
@@ -275,7 +274,6 @@ int rfcomm_channel_scan(int dev_id, char *target) {
 
   buff_sz = 1024;
   buff = (char *)malloc(buff_sz);
-
 
   addr.rc_family = AF_BLUETOOTH;
   str2ba(target, &addr.rc_bdaddr);
@@ -302,6 +300,61 @@ int rfcomm_channel_scan(int dev_id, char *target) {
   return 0;
 }
 
+int l2cap_req(int dev_id, char *target, int psm, int imtu, int omtu, int flush_to, int dcid, int flags) {
+  struct sockaddr_l2 addr = { 0 };
+  struct l2cap_options opts;
+  l2cap_conf_req req;
+  l2cap_conf_rsp rsp;
+  int sock, stat;
+
+  addr.l2_family = AF_BLUETOOTH;
+  addr.l2_psm = htobs((unsigned short)psm);
+  str2ba(target, &addr.l2_bdaddr);
+
+  memset(&opts, 0, sizeof(opts));
+  opts.imtu = imtu;
+  opts.omtu = omtu;
+  opts.flush_to = flush_to;
+
+  memset(&req, 0, sizeof(req));
+  req.dcid = htobs(dcid); 
+  req.flags = flags;
+
+  sock = prepare_l2cap_socket();
+  if (sock < 0) {
+    printf("prepare_l2cap_socket() failed\n");
+    return -1;
+  }
+  stat = setsockopt(sock, SOL_L2CAP, L2CAP_OPTIONS, &opts, sizeof(opts));
+  if (stat < 0) {
+    printf("setsockopt() failed\n");
+    close(sock);
+    return -1;
+  }
+  stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+  if (stat < 0) {
+    printf("connect() failed\n");
+    close(sock);
+    return -1;
+  }
+  stat = send(sock, &req, sizeof(req), 0);
+  if (stat < 0) {
+    printf("send() failed\n");
+    close(sock);
+    return -1;
+  }
+  stat = recv(sock, &rsp, sizeof(rsp), 0);
+  if (stat < 0) {
+    printf("recv() failed\n");
+    close(sock);
+    return -1;
+  }
+  printf("conf result: %d\n", rsp.result);
+
+  close(sock);
+}
+
+
 int l2cap_psm_comm(int dev_id, char *target, int psm, char *data) {
   struct sockaddr_l2 addr = { 0 };
   unsigned long buff_sz = 1024;
@@ -327,6 +380,36 @@ int l2cap_psm_comm(int dev_id, char *target, int psm, char *data) {
   rb = recv(sock, buff, buff_sz, 0);
   printf("%d bytes received: %s\n", rb, buff);
   close(sock); 
+}
+
+int l2cap_send_req(int dev_id, char **target) {
+  struct sockaddr_l2 addr = { 0 };
+  char *buff;
+  int sock, stat, buff_sz, sz;
+  unsigned short psm;
+  struct l2cap_options opts;
+  l2cap_conf_req *req = (l2cap_conf_req *)malloc(sizeof(l2cap_conf_req) + 10);
+
+  memset(req, 0, sizeof(req));
+  req->dcid = htobs(0xff);
+  req->flags = 0xff;
+  req->data[0] = 0xff;
+
+  addr.l2_family = AF_BLUETOOTH;
+  str2ba(target, &addr.l2_bdaddr);
+  addr.l2_psm = htobs(psm);
+
+  sock = prepare_l2cap_socket();
+  memset(&opts, 0, sizeof(opts));
+  opts.imtu = 48;
+  opts.omtu = 48;
+  opts.flush_to = 0xffff;
+  setsockopt(sock, SOL_L2CAP, L2CAP_OPTIONS, &opts, sizeof(opts));
+  stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+  send(sock, req, sizeof(req), 0);
+
+
+  close(sock);
 }
 
 int l2cap_psm_scan(int dev_id, char *target) {
@@ -508,6 +591,7 @@ void usage() {
   printf(" ./bluetool r 0 11:22:33:44:55:66             rfcomm channel scan (noisy)\n");
   printf(" ./bluetool l 0 11:22:33:44:55:66             l2cap psm scan\n");
   printf(" ./bluetool p 0 11:22:33:44:55:66 psm data    l2cap psm send data\n");
+  printf(" ./bluetool q 0 11:22:33:44:55:66 psm data imtu omtu flushto dcid flags    l2cap psm send req\n");
   printf(" ./bluetool c 0 11:22:33:44:55:66             low level command fuzzer\n");
   printf(" ./bluetool u 0 11:22:33:44:55:66             services uuid scan\n");
 
@@ -533,6 +617,8 @@ int main(int argc, char **argv) {
     case 'e': if (argc!=3) usage(); return blue_lescan(atoi(argv[2]));
     case 'h': if (argc!=3) usage(); return blue_hidden_scan(atoi(argv[2]));
     case 'r': if (argc!=4) usage(); return rfcomm_channel_scan(atoi(argv[2]), argv[3]);
+    case 'q': if (argc!=4) usage(); return l2cap_req(atoi(argv[2]), argv[3], atoi(argv[4]), 
+          atoi(argv[5]), atoi(argv[6]), atoi(argv[7]), atoi(argv[8]), atoi(argv[9]));
     case 'l': if (argc!=4) usage(); return l2cap_psm_scan(atoi(argv[2]), argv[3]);
     case 'c': if (argc!=4) usage(); return command_fuzzer(atoi(argv[2]), argv[3]);
     case 'u': if (argc!=4) usage(); return uuid_scan(atoi(argv[2]), argv[3]);
