@@ -75,111 +75,111 @@ int blue_scan(int dev_id) {
 }
 
 int blue_lescan(int dev_id) {
-  int sock;
-  size_t n;
-  char buff[261];
-  char opts[16];
-  struct iovec iov[3];
-  struct sockaddr_hci hci;
+    int sock;
+    size_t n;
+    char buff[261];
+    char opts[16];
+    struct iovec iov[3];
+    struct sockaddr_hci hci;
 
-  hci.hci_family = AF_BLUETOOTH;
-  hci.hci_dev = htobs(dev_id);
-  hci.hci_channel = HCI_CHANNEL_RAW;
+    hci.hci_family = AF_BLUETOOTH;
+    hci.hci_dev = htobs(dev_id);
+    hci.hci_channel = HCI_CHANNEL_RAW;
 
-  sock = socket(AF_BLUETOOTH, SOCK_RAW|SOCK_CLOEXEC, BTPROTO_HCI);
-  if (sock < 0) {
-    perror("socket error\n");
-    return;
-  }
-
-  n = bind(sock, &hci, 6);
-  if (n < 0) {
-    perror("bind error\n");
-    return;
-  }
-  
-  iov[0].iov_base = "\1";
-  iov[0].iov_len = 1;
-  iov[1].iov_base = "\v \7";
-  iov[1].iov_len = 3;
-  iov[2].iov_base = "\1\20\0\20\0\0\0";
-  iov[2].iov_len = 7;
-
-  strncpy(opts, "\20\0\0\0\1\300\0\0\0\0\0@\v \0\0", 16);
-  setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
-  n = writev(sock, &iov, 3);
-  if (n < 0) {
-    perror("writev error\n");
-    return;
-  }
-
-  n = read(sock, buff, 260);
-  if (n < 0) {
-    perror("read error\n");
-    return;
-  }
-  printf("%d bytes read\n");
-
-  iov[0].iov_base = "\1";
-  iov[0].iov_len = 1;
-  iov[1].iov_base = "\f \2";
-  iov[1].iov_len = 3;
-  iov[2].iov_base = "\1\1";
-  iov[2].iov_len = 2;
-
-  strncpy(opts, "\20\0\0\0\1\300\0\0\0\0\0@\f \0\0", 16);
-  setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
-  n = writev(sock, &iov, 3);
-  if (n < 0) {
-    perror("writev error\n");
-    return;
-  }
-
-  buff[260] = 0x00; 
-  n = read(sock, buff, 260);
-  if (n < 0) {
-    perror("read error\n");
-    return;
-  }
-
-
-  strncpy(opts, "\20\0\0\0\0\0\0\0\0\0\0@\0\0\0\0", 16);
-  setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
-
-  while (1) {
-    n = read(sock, buff, 260);
-    if (n < 0) {
-      perror("read error\n");
-      return;
+    sock = socket(AF_BLUETOOTH, SOCK_RAW|SOCK_CLOEXEC, BTPROTO_HCI);
+    if (sock < 0) {
+        perror("socket error\n");
+        return -1;
     }
 
-    printf("%s\n", buff);
-  }
+    n = bind(sock, &hci, 6);
+    if (n < 0) {
+        perror("bind error\n");
+        return -2;
+    }
+
+    iov[0].iov_base = "\1";
+    iov[0].iov_len = 1;
+    iov[1].iov_base = "\v \7";
+    iov[1].iov_len = 3;
+    iov[2].iov_base = "\1\20\0\20\0\0\0";
+    iov[2].iov_len = 7;
+
+    strncpy(opts, "\20\0\0\0\1\300\0\0\0\0\0@\v \0\0", 16);
+    setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
+    n = writev(sock, &iov, 3);
+    if (n < 0) {
+        perror("writev error\n");
+        return -3;
+    }
+
+    n = read(sock, buff, 260);
+    if (n < 0) {
+        perror("read error\n");
+        return -4;
+    }
+    printf("%d bytes read\n");
+
+    iov[0].iov_base = "\1";
+    iov[0].iov_len = 1;
+    iov[1].iov_base = "\f \2";
+    iov[1].iov_len = 3;
+    iov[2].iov_base = "\1\1";
+    iov[2].iov_len = 2;
+
+    strncpy(opts, "\20\0\0\0\1\300\0\0\0\0\0@\f \0\0", 16);
+    setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
+    n = writev(sock, &iov, 3);
+    if (n < 0) {
+        perror("writev error\n");
+        return -5;
+    }
+
+    buff[260] = 0x00; 
+    n = read(sock, buff, 260);
+    if (n < 0) {
+        perror("read error\n");
+        return -6;
+    }
+
+
+    strncpy(opts, "\20\0\0\0\0\0\0\0\0\0\0@\0\0\0\0", 16);
+    setsockopt(sock, SOL_IP, IP_TTL, &opts, 16);
+
+    while (1) {
+        n = read(sock, buff, 260);
+        if (n < 0) {
+            perror("read error\n");
+            return;
+        }
+
+        printf("%s\n", buff);
+    }
 
 
 
-  /*
-  getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
-  setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\1\300\0\0\0\0\0@\v \0\0", 16) = 0
+    /*
+    getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
+    setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\1\300\0\0\0\0\0@\v \0\0", 16) = 0
 
-  writev(sock, [{iov_base="\1", iov_len=1}, {iov_base="\v \7", iov_len=3}, {iov_base="\1\20\0\20\0\0\0", iov_len=7}], 3) 
-  poll([{fd=sock, events=POLLIN}], 1, 10000) = 1 ([{fd=3, revents=POLLIN}])
-  read(sock, "\4\16\4\1\v \0", 260)          = 7
-  setsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) = 0
-  getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
-  setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\1\300\0\0\0\0\0@\f \0\0", 16) = 0
-  writev(sock, [{iov_base="\1", iov_len=1}, {iov_base="\f \2", iov_len=3}, {iov_base="\1\1", iov_len=2}], 3) = 6
-  poll([{fd=sock, events=POLLIN}], 1, 10000) = 1 ([{fd=3, revents=POLLIN}])
-  read(sock, "\4\16\4\2\f \0", 260)          = 7
-  setsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) = 0
-  getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
-  setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\0\0\0\0\0\0\0@\0\0\0\0", 16) = 0
-  rt_sigaction(SIGINT, {sa_handler=0x55f9862b9db0, sa_mask=[], sa_flags=SA_RESTORER|SA_NOCLDSTOP, sa_restorer=0x7f3b68f60890}, NULL, 8) = 0
-  read(3, "\4>\32\2\1\0\1\20\222n\266+V\16\2\1\32\n\377L\0\20\5\q3\34\353\261\263\302", 260) = 29
-  */
+    writev(sock, [{iov_base="\1", iov_len=1}, {iov_base="\v \7", iov_len=3}, {iov_base="\1\20\0\20\0\0\0", iov_len=7}], 3) 
+    poll([{fd=sock, events=POLLIN}], 1, 10000) = 1 ([{fd=3, revents=POLLIN}])
+    read(sock, "\4\16\4\1\v \0", 260)          = 7
+    setsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) = 0
+    getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
+    setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\1\300\0\0\0\0\0@\f \0\0", 16) = 0
+    writev(sock, [{iov_base="\1", iov_len=1}, {iov_base="\f \2", iov_len=3}, {iov_base="\1\1", iov_len=2}], 3) = 6
+    poll([{fd=sock, events=POLLIN}], 1, 10000) = 1 ([{fd=3, revents=POLLIN}])
+    read(sock, "\4\16\4\2\f \0", 260)          = 7
+    setsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16) = 0
+    getsockopt(sock, SOL_IP, IP_TTL, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", [16]) = 0
+    setsockopt(sock, SOL_IP, IP_TTL, "\20\0\0\0\0\0\0\0\0\0\0@\0\0\0\0", 16) = 0
+    rt_sigaction(SIGINT, {sa_handler=0x55f9862b9db0, sa_mask=[], sa_flags=SA_RESTORER|SA_NOCLDSTOP, sa_restorer=0x7f3b68f60890}, NULL, 8) = 0
+    read(3, "\4>\32\2\1\0\1\20\222n\266+V\16\2\1\32\n\377L\0\20\5\q3\34\353\261\263\302", 260) = 29
+    */
 
 
-  close(sock);
+    close(sock);
 }
 
 int blue_hidden_scan(int dev_id) {
@@ -408,8 +408,73 @@ int l2cap_send_req(int dev_id, char **target) {
   stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
   send(sock, req, sizeof(req), 0);
 
-
   close(sock);
+}
+
+int l2cap_ping(int dev_id, char *target, int psm) {
+  struct sockaddr_l2 addr = { 0 };
+  char *buff;
+  int sock, stat;
+  l2cap_cmd_hdr *ping_request;
+  l2cap_cmd_hdr *ping_response;
+  unsigned long sz = sizeof(l2cap_cmd_hdr);
+
+  buff = (char *)malloc(sz + 4);
+  memset(buff, 0x41, sz);
+  ping_request = (l2cap_cmd_hdr *)buff;
+
+  ping_request->ident = 200;
+  ping_request->len = htobs(1);
+  ping_request->code = L2CAP_ECHO_REQ;
+
+  addr.l2_psm = htobs((unsigned short)psm);
+  addr.l2_family = AF_BLUETOOTH;
+  str2ba(target, &addr.l2_bdaddr);
+
+  sock = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_L2CAP);
+  if (sock<0) {
+      printf("cannot create socket\n");
+      return -1;
+  }
+  stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+  if (stat<0) {
+      printf("cannot connect\n");
+      return -1;
+  }
+  
+  stat = send(sock, buff, sz, 0);
+  if (stat<0) {
+      printf("error, cannot send l2cap ping.\n");
+      close(sock);
+      return -1;
+  }
+  if (stat == sz) {
+      printf("l2cap ping sent ok.\n");
+  } else {
+      printf("l2cap ping not totally sent.\n");
+  }
+
+  memset(buff, 0, sz);
+
+  stat = recv(sock, buff, sz, 0);
+  if (stat<0) {
+      printf("error receiving l2cap ping response.\n");
+
+  } else if (stat == sz) {
+      ping_response = (l2cap_cmd_hdr *)buff;
+
+      if (ping_response->code == L2CAP_ECHO_RSP) {
+        printf("l2cap endpoint reponded with echo response and data %s.\n", &buff[sz-4]);
+      } else {
+        printf("l2cap endpoint responed with bad code: %d and data: %s.\n", 
+                ping_response->code, &buff[sz-4]);
+      }
+  } else {
+      printf("l2cap endpoint responed with incomplete message.\n");
+  }
+ 
+  free(buff);
+  close(sock); 
 }
 
 int l2cap_psm_scan(int dev_id, char *target) {
@@ -590,10 +655,11 @@ void usage() {
   printf(" ./bluetool h 0                               scan hidden devices (very slow)\n");
   printf(" ./bluetool r 0 11:22:33:44:55:66             rfcomm channel scan (noisy)\n");
   printf(" ./bluetool l 0 11:22:33:44:55:66             l2cap psm scan\n");
-  printf(" ./bluetool p 0 11:22:33:44:55:66 psm data    l2cap psm send data\n");
+  printf(" ./bluetool s 0 11:22:33:44:55:66 psm data    l2cap psm send data\n");
   printf(" ./bluetool q 0 11:22:33:44:55:66 psm data imtu omtu flushto dcid flags    l2cap psm send req\n");
   printf(" ./bluetool c 0 11:22:33:44:55:66             low level command fuzzer\n");
   printf(" ./bluetool u 0 11:22:33:44:55:66             services uuid scan\n");
+  printf(" ./bluetool p 0 11:22:33:44:55:66 psm         l2cap ping request\n");
 
   printf("\n");
   exit(1);
@@ -622,7 +688,8 @@ int main(int argc, char **argv) {
     case 'l': if (argc!=4) usage(); return l2cap_psm_scan(atoi(argv[2]), argv[3]);
     case 'c': if (argc!=4) usage(); return command_fuzzer(atoi(argv[2]), argv[3]);
     case 'u': if (argc!=4) usage(); return uuid_scan(atoi(argv[2]), argv[3]);
-    case 'p': if (argc!=6) usage(); return l2cap_psm_comm(atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
+    //case 's': if (argc!=6) usage(); return l2cap_psm_comm(atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
+    case 'p': if (argc!=5) usage(); return l2cap_ping(atoi(argv[2]), argv[3], atoi(argv[4]));
     default: usage();
   }
 }
