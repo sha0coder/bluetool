@@ -32,6 +32,10 @@
 float VERSION = 0.2;
 char VERBOSE = 0;
 
+unsigned long l2cap_comm(int dev_id, char *target, int psm, int raw, char *sbuff, unsigned long sbuff_sz,
+        char *rbuff, unsigned long rbuff_sz);
+
+
 int blue_scan(int dev_id) {
     inquiry_info *ii = NULL;
     int max_rsp, num_rsp;
@@ -284,12 +288,19 @@ int rfcomm_channel_scan(int dev_id, char *target) {
     printf("channel: %d\n", addr.rc_channel);
     stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     if (stat==0) {
-      printf(" channel %u open\n", channel);
-      sz = write(sock, "\r\n\r\n", 4);
-      printf("    sent %d bytes\n", sz);
+      printf(" channel %u open\n", addr.rc_channel);
+      sz = write(sock, "AT+BTMODE=3\r\n", 14);
+
       memset(buff, 0, buff_sz);
       sz = recv(sock, buff, buff_sz, 0);
       printf("    received %d bytes, banner: [%s]\n", sz, buff);
+
+      sz = write(sock, "AT+CGMI\r\n", 10);
+
+      memset(buff, 0, buff_sz);
+      sz = recv(sock, buff, buff_sz, 0);
+      printf("    received %d bytes, banner: [%s]\n", sz, buff);
+
     }
 
     close(sock);
@@ -378,7 +389,7 @@ int l2cap_psm_comm(int dev_id, char *target, int psm, char *data) {
   sent = send(sock, data, strlen(data), 0);
   printf("%d bytes sent\n", sent);
   rb = recv(sock, buff, buff_sz, 0);
-  printf("%d bytes received: %s\n", rb, buff);
+  printf("%d bytes received: [%s]\n", rb, buff);
   close(sock); 
 }
 
@@ -411,70 +422,215 @@ int l2cap_send_req(int dev_id, char **target) {
   close(sock);
 }
 
+void l2cap_show_command(uint8_t cmd) {
+    switch (cmd) {
+        case L2CAP_COMMAND_REJ:
+            printf("L2CAP_COMMAND_REJ");
+            break;
+        case L2CAP_CONN_REQ:
+            printf("L2CAP_CONN_REQ");
+            break;
+        case L2CAP_CONN_RSP:
+            printf("L2CAP_CONN_RSP");
+            break;
+        case L2CAP_CONF_REQ:
+            printf("L2CAP_CONF_REQ");
+            break;
+        case L2CAP_CONF_RSP:
+            printf("L2CAP_CONF_RSP");
+            break;
+        case L2CAP_DISCONN_REQ:
+            printf("L2CAP_DISCONN_REQ");
+            break;
+        case L2CAP_DISCONN_RSP:
+            printf("L2CAP_DISCONN_RSP");
+            break;
+        case L2CAP_INFO_REQ:
+            printf("L2CAP_INFO_REQ");
+            break;
+        case L2CAP_INFO_RSP:
+            printf("L2CAP_INFO_RSP");
+            break;
+        case L2CAP_CREATE_REQ:
+            printf("L2CAP_CREATE_REQ");
+            break;
+        case L2CAP_CREATE_RSP:
+            printf("L2CAP_CREATE_RSP");
+            break;
+        case L2CAP_MOVE_REQ:
+            printf("L2CAP_MOVE_REQ");
+            break;
+        case L2CAP_MOVE_RSP:
+            printf("L2CAP_MOVE_RSP");
+            break;
+        case L2CAP_MOVE_CFM:
+            printf("L2CAP_MOVE_CFM");
+            break;
+        case L2CAP_MOVE_CFM_RSP:
+            printf("L2CAP_MOVE_CFM_RSP");
+            break;
+    }
+}
+
+
+int l2cap_interact(int dev_id, char *target, int psm, int scid, int datalen) {
+    unsigned long stat;
+    l2cap_conn_req *req;
+    l2cap_conn_rsp *rsp;
+    unsigned long sbuff_sz = sizeof(l2cap_conn_req)+datalen;
+    unsigned long rbuff_sz = sizeof(l2cap_conn_rsp)+datalen;
+    char *sbuff = (char *)malloc(sbuff_sz);
+    char *rbuff = (char *)malloc(rbuff_sz);
+
+    memset(sbuff, 0x41, sbuff_sz);
+    memset(rbuff, 0x41, rbuff_sz);
+
+    req = (l2cap_conn_req *)sbuff;
+    req->psm = psm;
+    req->scid = scid;
+    rsp = (l2cap_conn_rsp *)rbuff;
+    
+    stat = l2cap_comm(dev_id, target, psm, 0, sbuff, sbuff_sz, rbuff, rbuff_sz);
+    
+    if (stat == 0) {
+        printf("connection request failed\n");
+
+    } else if (stat == rbuff_sz) {
+        printf("response result: %d status: %d data:[%s]\n", rsp->result, rsp->status, 
+                *(rbuff+rbuff_sz-datalen));
+    } else {
+        printf("response result: %d status: %d\n", rsp->result, rsp->status);
+    }
+
+}
+
+
+/* 
+   this function do all the l2cap communications
+*/
+
+unsigned long l2cap_comm(int dev_id, char *target, int psm, int raw, char *sbuff, unsigned long sbuff_sz, 
+        char *rbuff, unsigned long rbuff_sz) {
+
+    struct sockaddr_l2 addr = { 0 };
+    int sock, stat;
+
+    addr.l2_psm = htobs((unsigned short)psm);
+    addr.l2_family = AF_BLUETOOTH;
+    str2ba(target, &addr.l2_bdaddr);
+    
+    if (raw) 
+        sock = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_L2CAP);
+    else
+        sock = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
+
+    if (sock < 0) {
+        printf("cannot create socket, use sudo\n");
+        return 0;
+    }
+
+    stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (stat < 0) {
+        printf("cannot connect\n");
+        return 0;
+    }
+
+    stat = send(sock, sbuff, sbuff_sz, 0);
+    if (stat < 0) {
+        printf("error, cannot send l2cap request.\n");
+        close(sock);
+        return 0;
+    }
+    if (stat == sbuff_sz) {
+        printf("l2cap sent ok.\n");
+    } else {
+        printf("l2cap not totally sent.\n");
+    }
+
+    stat = recv(sock, rbuff, rbuff_sz, 0);
+    if (stat < 0) {
+        printf("error receiving l2cap response.\n");
+        close(sock);
+        return 0;
+
+    } else if (stat == rbuff_sz) {
+        printf("l2cap received ok.\n");
+    } else {
+        printf("l2cap partially received.\n");
+    }
+
+    close(sock); 
+    return stat;
+}
+
+
+
 int l2cap_ping(int dev_id, char *target, int psm) {
-  struct sockaddr_l2 addr = { 0 };
-  char *buff;
-  int sock, stat;
-  l2cap_cmd_hdr *ping_request;
-  l2cap_cmd_hdr *ping_response;
-  unsigned long sz = sizeof(l2cap_cmd_hdr);
+    struct sockaddr_l2 addr = { 0 };
+    char *buff;
+    int sock, stat;
+    l2cap_cmd_hdr *ping_request;
+    l2cap_cmd_hdr *ping_response;
+    unsigned long sz = sizeof(l2cap_cmd_hdr);
 
-  buff = (char *)malloc(sz + 4);
-  memset(buff, 0x41, sz);
-  ping_request = (l2cap_cmd_hdr *)buff;
+    buff = (char *)malloc(sz + 4);
+    memset(buff, 0x41, sz);
+    ping_request = (l2cap_cmd_hdr *)buff;
 
-  ping_request->ident = 200;
-  ping_request->len = htobs(1);
-  ping_request->code = L2CAP_ECHO_REQ;
+    ping_request->ident = 200;
+    ping_request->len = htobs(1);
+    ping_request->code = L2CAP_ECHO_REQ;
 
-  addr.l2_psm = htobs((unsigned short)psm);
-  addr.l2_family = AF_BLUETOOTH;
-  str2ba(target, &addr.l2_bdaddr);
+    addr.l2_psm = htobs((unsigned short)psm);
+    addr.l2_family = AF_BLUETOOTH;
+    str2ba(target, &addr.l2_bdaddr);
 
-  sock = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_L2CAP);
-  if (sock<0) {
-      printf("cannot create socket\n");
-      return -1;
-  }
-  stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-  if (stat<0) {
-      printf("cannot connect\n");
-      return -1;
-  }
-  
-  stat = send(sock, buff, sz, 0);
-  if (stat<0) {
-      printf("error, cannot send l2cap ping.\n");
-      close(sock);
-      return -1;
-  }
-  if (stat == sz) {
-      printf("l2cap ping sent ok.\n");
-  } else {
-      printf("l2cap ping not totally sent.\n");
-  }
+    //sock = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_L2CAP);
+    sock = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
+    if (sock<0) {
+        printf("cannot create socket, use sudo\n");
+        return -1;
+    }
+    stat = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (stat<0) {
+        printf("cannot connect\n");
+        return -1;
+    }
 
-  memset(buff, 0, sz);
+    stat = send(sock, buff, sz, 0);
+    if (stat<0) {
+        printf("error, cannot send l2cap ping.\n");
+        close(sock);
+        return -1;
+    }
+    if (stat == sz) {
+        printf("l2cap ping sent ok.\n");
+    } else {
+        printf("l2cap ping not totally sent.\n");
+    }
 
-  stat = recv(sock, buff, sz, 0);
-  if (stat<0) {
-      printf("error receiving l2cap ping response.\n");
+    memset(buff, 0, sz);
 
-  } else if (stat == sz) {
-      ping_response = (l2cap_cmd_hdr *)buff;
+    stat = recv(sock, buff, sz, 0);
+    if (stat<0) {
+        printf("error receiving l2cap ping response.\n");
 
-      if (ping_response->code == L2CAP_ECHO_RSP) {
-        printf("l2cap endpoint reponded with echo response and data %s.\n", &buff[sz-4]);
-      } else {
-        printf("l2cap endpoint responed with bad code: %d and data: %s.\n", 
-                ping_response->code, &buff[sz-4]);
-      }
-  } else {
-      printf("l2cap endpoint responed with incomplete message.\n");
-  }
- 
-  free(buff);
-  close(sock); 
+    } else if (stat == sz) {
+        ping_response = (l2cap_cmd_hdr *)buff;
+
+        if (ping_response->code == L2CAP_ECHO_RSP) {
+            printf("l2cap endpoint reponded with echo response and data [%s]\n", &buff[sz-4]);
+        } else {
+            printf("l2cap endpoint responed with bad code: %d ", ping_response->code);
+            l2cap_show_command(ping_response->code);
+            printf(" and data: [%s].\n", &buff[sz-4]);
+        }
+    } else {
+        printf("l2cap endpoint responed with incomplete message.\n");
+    }
+
+    free(buff);
+    close(sock); 
 }
 
 int l2cap_psm_scan(int dev_id, char *target) {
@@ -655,11 +811,13 @@ void usage() {
   printf(" ./bluetool h 0                               scan hidden devices (very slow)\n");
   printf(" ./bluetool r 0 11:22:33:44:55:66             rfcomm channel scan (noisy)\n");
   printf(" ./bluetool l 0 11:22:33:44:55:66             l2cap psm scan\n");
-  printf(" ./bluetool s 0 11:22:33:44:55:66 psm data    l2cap psm send data\n");
   printf(" ./bluetool q 0 11:22:33:44:55:66 psm data imtu omtu flushto dcid flags    l2cap psm send req\n");
   printf(" ./bluetool c 0 11:22:33:44:55:66             low level command fuzzer\n");
   printf(" ./bluetool u 0 11:22:33:44:55:66             services uuid scan\n");
+  printf(" ./bluetool d 0 11:22:33:44:55:66 psm DATA    send data on a psm\n");
   printf(" ./bluetool p 0 11:22:33:44:55:66 psm         l2cap ping request\n");
+  printf(" ./bluetool n 0 11:22:33:44:55:66 psm scid datalen       interact with l2cap\n");
+
 
   printf("\n");
   exit(1);
@@ -688,8 +846,11 @@ int main(int argc, char **argv) {
     case 'l': if (argc!=4) usage(); return l2cap_psm_scan(atoi(argv[2]), argv[3]);
     case 'c': if (argc!=4) usage(); return command_fuzzer(atoi(argv[2]), argv[3]);
     case 'u': if (argc!=4) usage(); return uuid_scan(atoi(argv[2]), argv[3]);
-    //case 's': if (argc!=6) usage(); return l2cap_psm_comm(atoi(argv[2]), argv[3], atoi(argv[4]), argv[5]);
+    case 'd': if (argc!=6) usage(); return l2cap_psm_comm(atoi(argv[2]) /*device*/, argv[3] /*target*/, 
+                      atoi(argv[4]) /*psm*/, argv[5] /*data*/);
     case 'p': if (argc!=5) usage(); return l2cap_ping(atoi(argv[2]), argv[3], atoi(argv[4]));
+    case 'n': if (argc!=7) usage(); return l2cap_interact(atoi(argv[2]), argv[3], atoi(argv[4]), 
+                      atoi(argv[5]), atoi(argv[6]));
     default: usage();
-  }
+      }
 }
