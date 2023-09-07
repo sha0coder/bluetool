@@ -14,7 +14,7 @@ bluetool v0.20 usage:
  ./bluetool h 0                               scan hidden devices (very slow)
  ./bluetool r 0 11:22:33:44:55:66             rfcomm channel scan (noisy)
  ./bluetool l 0 11:22:33:44:55:66             l2cap psm scan
- ./bluetool s 0 11:22:33:44:55:66 psm data    l2cap psm send data
+ ./bluetool d 0 11:22:33:44:55:66 psm data    l2cap psm send data
  ./bluetool q 0 11:22:33:44:55:66 psm data imtu omtu flushto dcid flags    l2cap psm send req
  ./bluetool c 0 11:22:33:44:55:66             low level command fuzzer
  ./bluetool u 0 11:22:33:44:55:66             services uuid scan
